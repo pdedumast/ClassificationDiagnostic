@@ -1,0 +1,6 @@
+[submodule "DiagnosticIndexExtension"]
+	path = DiagnosticIndexExtension
+	url = https://github.com/DCBIA-OrthoLab/DiagnosticIndexExtension.git
+[submodule "ShapeClassification"]
+	path = ShapeClassification
+	url = git@github.com:pdedumast/ShapeClassification.git
