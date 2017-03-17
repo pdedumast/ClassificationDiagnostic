@@ -4,6 +4,59 @@ import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 import logging
 
+
+
+# ********************************************** #
+# **************** Useful class **************** #
+# ********************************************** #
+
+class ExternalModuleTab():
+  def __init__(self):
+    self.collapsibleButton = None
+    self.layout = None
+    self.choiceComboBox = None
+    self.currentModule = None
+    self.currentComboboxIndex = None
+
+  def hideCurrentModule(self):
+    if self.currentModule:
+      if hasattr(self.currentModule, 'widget'):
+        self.layout.removeWidget(self.currentModule.widget)
+        self.currentModule.widget.hide()
+      else:
+        self.layout.removeWidget(self.currentModule.widgetRepresentation())
+        self.currentModule.widgetRepresentation().hide()
+      self.choiceComboBox.setCurrentIndex(0)
+
+  def deleteCurrentModule(self):
+    self.hideCurrentModule()
+    self.currentModule = None
+    self.currentComboboxIndex = 0
+
+  def showCurrentModule(self):
+    if self.currentModule:
+      if hasattr(self.currentModule, 'widget'):
+        self.layout.addWidget(self.currentModule.widget)
+        self.currentModule.widget.show()
+      else:
+        self.layout.addWidget(self.currentModule.widgetRepresentation())
+        self.currentModule.widgetRepresentation().show()
+      if hasattr(self.currentModule, 'enter'):
+        self.currentModule.enter()
+      self.choiceComboBox.setCurrentIndex(self.currentComboboxIndex)
+
+  def setCurrentModule(self, module, index):
+    self.deleteCurrentModule()
+    self.currentModule = module
+    self.currentComboboxIndex = index
+    self.showCurrentModule()
+
+
+
+# *********************************************************
+
+
+
 #
 # ClassificationDiagnostic
 #
@@ -16,16 +69,18 @@ class ClassificationDiagnostic(ScriptedLoadableModule):
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
     self.parent.title = "ClassificationDiagnostic" # TODO make this more human readable by adding spaces
-    self.parent.categories = ["Examples"]
+    self.parent.categories = ["Quantification"]
     self.parent.dependencies = []
-    self.parent.contributors = ["John Doe (AnyWare Corp.)"] # replace with "Firstname Lastname (Organization)"
+    self.parent.contributors = ["Priscille de Dumast (University of Michigan)"] 
     self.parent.helpText = """
-    This is an example of scripted loadable module bundled in an extension.
-    It performs a simple thresholding on the input volume and optionally captures a screenshot.
+    TODO
     """
     self.parent.acknowledgementText = """
-    This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc.
-    and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
+    This work was supported by the National
+            Institutes of Dental and Craniofacial Research
+            and Biomedical Imaging and Bioengineering of
+            the National Institutes of Health under Award
+            Number R01DE024450.
 """ # replace with organization, grant and thanks.
 
 #
@@ -40,97 +95,133 @@ class ClassificationDiagnosticWidget(ScriptedLoadableModuleWidget):
   def setup(self):
     ScriptedLoadableModuleWidget.setup(self)
 
-    # Instantiate and connect widgets ...
+    # ---- Widget Setup ----
 
-    #
-    # Parameters Area
-    #
-    parametersCollapsibleButton = ctk.ctkCollapsibleButton()
-    parametersCollapsibleButton.text = "Parameters"
-    self.layout.addWidget(parametersCollapsibleButton)
+    # Global Variables
+    self.logic = ClassificationDiagnosticLogic(self)
 
-    # Layout within the dummy collapsible button
-    parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
+    # Interface
+    loader = qt.QUiLoader()
+    self.moduleName = 'ClassificationDiagnostic'
+    scriptedModulesPath = eval('slicer.modules.%s.path' % self.moduleName.lower())
+    scriptedModulesPath = os.path.dirname(scriptedModulesPath)
+    path = os.path.join(scriptedModulesPath, 'Resources', 'UI', '%s.ui' % self.moduleName)
+    qfile = qt.QFile(path)
+    qfile.open(qt.QFile.ReadOnly)
 
-    #
-    # input volume selector
-    #
-    self.inputSelector = slicer.qMRMLNodeComboBox()
-    self.inputSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.inputSelector.selectNodeUponCreation = True
-    self.inputSelector.addEnabled = False
-    self.inputSelector.removeEnabled = False
-    self.inputSelector.noneEnabled = False
-    self.inputSelector.showHidden = False
-    self.inputSelector.showChildNodeTypes = False
-    self.inputSelector.setMRMLScene( slicer.mrmlScene )
-    self.inputSelector.setToolTip( "Pick the input to the algorithm." )
-    parametersFormLayout.addRow("Input Volume: ", self.inputSelector)
+    widget = loader.load(qfile, self.parent)
+    self.layout = self.parent.layout()
+    self.widget = widget
+    self.layout.addWidget(widget)
 
-    #
-    # output volume selector
-    #
-    self.outputSelector = slicer.qMRMLNodeComboBox()
-    self.outputSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.outputSelector.selectNodeUponCreation = True
-    self.outputSelector.addEnabled = True
-    self.outputSelector.removeEnabled = True
-    self.outputSelector.noneEnabled = True
-    self.outputSelector.showHidden = False
-    self.outputSelector.showChildNodeTypes = False
-    self.outputSelector.setMRMLScene( slicer.mrmlScene )
-    self.outputSelector.setToolTip( "Pick the output to the algorithm." )
-    parametersFormLayout.addRow("Output Volume: ", self.outputSelector)
+    # self.comboBox_moduleChoice = self.logic.get('comboBox_moduleChoice')
+    # self.collapsibleButton_module = self.logic.get('collapsibleButton_module')
 
-    #
-    # threshold value
-    #
-    self.imageThresholdSliderWidget = ctk.ctkSliderWidget()
-    self.imageThresholdSliderWidget.singleStep = 0.1
-    self.imageThresholdSliderWidget.minimum = -100
-    self.imageThresholdSliderWidget.maximum = 100
-    self.imageThresholdSliderWidget.value = 0.5
-    self.imageThresholdSliderWidget.setToolTip("Set threshold value for computing the output image. Voxels that have intensities lower than this value will set to zero.")
-    parametersFormLayout.addRow("Image threshold", self.imageThresholdSliderWidget)
 
-    #
-    # check box to trigger taking screen shots for later use in tutorials
-    #
-    self.enableScreenshotsFlagCheckBox = qt.QCheckBox()
-    self.enableScreenshotsFlagCheckBox.checked = 0
-    self.enableScreenshotsFlagCheckBox.setToolTip("If checked, take screen shots for tutorials. Use Save Data to write them to disk.")
-    parametersFormLayout.addRow("Enable Screenshots", self.enableScreenshotsFlagCheckBox)
+    self.ExtModuleTab = ExternalModuleTab()
+    self.ExtModuleTab.layout = self.logic.get('layout_module')
+    self.ExtModuleTab.choiceComboBox = self.logic.get('comboBox_moduleChoice')
 
-    #
-    # Apply Button
-    #
-    self.applyButton = qt.QPushButton("Apply")
-    self.applyButton.toolTip = "Run the algorithm."
-    self.applyButton.enabled = False
-    parametersFormLayout.addRow(self.applyButton)
 
-    # connections
-    self.applyButton.connect('clicked(bool)', self.onApplyButton)
-    self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
-    self.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
+    # ------------------------------------------------------------------------------ #
+    # ---------------- Setup and initialisation of global variables ---------------- #
+    # ------------------------------------------------------------------------------ #
 
-    # Add vertical spacer
-    self.layout.addStretch(1)
+    # ------ Initialisation of the other modules is Slicer, if that's not already done ----- #
+    if not hasattr(slicer.modules, 'DiagnosticIndexWidget'):
+      slicer.modules.diagnosticindex.createNewWidgetRepresentation()
+    if not hasattr(slicer.modules, 'ClassificationWidget'):
+      slicer.modules.classification.createNewWidgetRepresentation()
 
-    # Refresh Apply button state
-    self.onSelect()
+
+    # ------ Creation of a dictionary that will contain the pythons modules ----- #
+    self.ExternalPythonModules = dict()
+    self.ExternalPythonModules["Diagnostic Index"] = slicer.modules.DiagnosticIndexWidget
+    self.ExternalPythonModules["Shape Classification"] = slicer.modules.ClassificationWidget
+
+
+    # ------ Creation of a dictionary that will contain the CLI modules ----- #
+    self.ExternalCLIModules = dict()
+    # self.ExternalCLIModules["Model to Model Distance"] = slicer.modules.modeltomodeldistance
+    self.ExternalCLIModules["Shape Population Viewer"] = slicer.modules.launcher  
+
+    # ------ Creation of a dictionary that will contain all the modules ----- #
+    self.ExternalModulesDict = dict(self.ExternalPythonModules, **self.ExternalCLIModules)
+
+    # ------ Setup of the external CLI modules ------ #
+    # Setting the size to the good value
+    for key, value in self.ExternalCLIModules.iteritems():
+        value.widgetRepresentation().setSizePolicy(1,1)
+        value.widgetRepresentation().adjustSize()
+
+    # --------------------------------------------- #
+    # ---------------- Connections ---------------- #
+    # --------------------------------------------- #
+
+    # self.comboBox_moduleChoice.connect('currentIndexChanged(QString)', self.onModuleChoiceChanged)
+
+    # ------ Eternal Modules Selections ----- #
+    self.ExtModuleTab.choiceComboBox.connect('currentIndexChanged(QString)',
+                                          lambda newModule, currentCombobox = self.ExtModuleTab.choiceComboBox:
+                                          self.onExternalModuleChangement(newModule, currentCombobox))
+
+    # ------ Closing of the scene -----#
+    slicer.mrmlScene.AddObserver(slicer.mrmlScene.EndCloseEvent, self.onCloseScene)
+
 
   def cleanup(self):
     pass
 
-  def onSelect(self):
-    self.applyButton.enabled = self.inputSelector.currentNode() and self.outputSelector.currentNode()
 
-  def onApplyButton(self):
-    logic = ClassificationDiagnosticLogic()
-    enableScreenshotsFlag = self.enableScreenshotsFlagCheckBox.checked
-    imageThreshold = self.imageThresholdSliderWidget.value
-    logic.run(self.inputSelector.currentNode(), self.outputSelector.currentNode(), imageThreshold, enableScreenshotsFlag)
+
+  # ******************************************* #
+  # ---------------- Algorithm ---------------- #
+  # ******************************************* #
+
+  def onReload(self):
+    slicer.util.reloadScriptedModule(self.moduleName)
+    for key, value in self.ExternalPythonModules.iteritems():
+      slicer.util.reloadScriptedModule(value.moduleName)
+
+
+  # function called each time that the scene is closed (if Shape Quantifier has been initialized)
+  def onCloseScene(self, obj, event):
+    print "---- Close Shape Quantifier ---- "
+    print " TODO "
+    # for ExtModTab in self.ExternalModuleTabDict.itervalues():
+    #   ExtModTab.choiceComboBox.setCurrentIndex(0)
+
+  # ---------- switching of Tab ----------- #
+  # Only one tab can be display at the same time, so when one tab is opened
+  # all the other tabs are closed by this function
+  # def onSelectedCollapsibleButtonChanged(self, selectedCollapsibleButton):
+  #   print "--- on Selected Collapsible Button Changed ---"
+  #   if selectedCollapsibleButton.isChecked():
+  #     self.SceneCollapsibleButton.setChecked(False)
+  #     self.DataSelectionCollapsibleButton.setChecked(False)
+  #     for ExtModTab in self.ExternalModuleTabDict.itervalues():
+  #       ExtModTab.choiceComboBox.blockSignals(True)
+  #       if ExtModTab.collapsibleButton is selectedCollapsibleButton:
+  #         ExtModTab.showCurrentModule()
+  #       else:
+  #         ExtModTab.collapsibleButton.setChecked(False)
+  #         ExtModTab.hideCurrentModule()
+  #       ExtModTab.choiceComboBox.blockSignals(False)
+  #     selectedCollapsibleButton.setChecked(True)
+  #     self.propagationOfInputDataToExternalModules()
+
+  # ---------- switching of External Module ----------- #
+  # This function hide all the external widgets if they are displayed
+  # And show the new external module given in argument
+  def onExternalModuleChangement(self, newModule, currentCombobox):
+    print "--- on External Module Changement ---"
+    self.ExtModuleTab.choiceComboBox.blockSignals(True)
+    if newModule != "None":
+      self.ExtModuleTab.setCurrentModule(self.ExternalModulesDict[newModule], currentCombobox.currentIndex)
+    else:
+      self.ExtModuleTab.deleteCurrentModule()
+    self.ExtModuleTab.choiceComboBox.blockSignals(False)
+    
 
 #
 # ClassificationDiagnosticLogic
@@ -145,6 +236,24 @@ class ClassificationDiagnosticLogic(ScriptedLoadableModuleLogic):
   Uses ScriptedLoadableModuleLogic base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
+
+  def __init__(self, interface):
+    self.interface = interface
+
+  # Functions to recovery the widget in the .ui file
+  def get(self, objectName):
+      return self.findWidget(self.interface.widget, objectName)
+
+  def findWidget(self, widget, objectName):
+    if widget.objectName == objectName:
+        return widget
+    else:
+        for w in widget.children():
+            resulting_widget = self.findWidget(w, objectName)
+            if resulting_widget:
+                return resulting_widget
+        return None
+
 
   def hasImageData(self,volumeNode):
     """This is an example logic method that
